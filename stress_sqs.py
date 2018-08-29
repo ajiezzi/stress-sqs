@@ -4,7 +4,7 @@ import logging
 import random
 import time
 
-from boto3 import resource
+from boto3 import client
 from botocore.errorfactory import ClientError
 
 
@@ -27,39 +27,35 @@ class StressSQS:
         self.log = logging.getLogger("stress-sqs")
 
         # Verify environment vars for SQS config exist
-        if 'SQS_NAME' not in os.environ.keys():
-            self.log.error("SQS_NAME env var is not set.")
-            sys.exit(1)
-
-        if 'SQS_ENDPOINT' not in os.environ.keys():
-            self.log.error("SQS_ENDPOINT env var is not set.")
+        if 'QUEUE_URL' not in os.environ.keys():
+            self.log.error("QUEUE_URL env var is not set.")
             sys.exit(1)
 
         if 'INTERVAL' not in os.environ.keys():
             self.log.error("INTERVAL env var is not set.")
             sys.exit(1)
 
-        self.interval = os.environ.get('INTERVAL')
+        """Boto3 will use the AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, 
+        and AWS_DEFAULT_REGION env vars as it's credentials
+        """
+        self.sqs = client('sqs')
+
+        self.url = os.environ.get('QUEUE_URL')
+        self.interval = int(os.environ.get('INTERVAL'))
 
     def send_message_batch(self):
 
-        endpoint_url = os.environ.get('SQS_ENDPOINT')
-        queue_name = os.environ.get('SQS_NAME')
-
-        self.log.info("SQS queue name:  %s", queue_name)
-
         try:
-            """Boto3 will use the AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, 
-                and AWS_DEFAULT_REGION env vars as it's credentials
-            """
-            sqs = resource(
-                'sqs',
-                endpoint_url=endpoint_url
-            )
 
             count = 0
-            while count < random.randint(1, 11):
-                sqs.send_message(MessageBody='stress testing SQS')
+            batch_size = random.randint(1, 11)
+            self.log.info("Sending batch of %s messages", batch_size)
+
+            while count < batch_size:
+                self.sqs.send_message(
+                    QueueUrl=self.url,
+                    MessageBody='stress testing SQS'
+                )
                 count += 1
 
         except ClientError as e:
@@ -71,6 +67,7 @@ class StressSQS:
             self.send_message_batch()
             self.log.info("Sleeping for %s seconds", self.interval)
             time.sleep(self.interval)
+
 
 if __name__ == "__main__":
     stressSqs = StressSQS()
